@@ -1,0 +1,21 @@
+# O contexto de build só precisa do código e do manifesto.
+.git/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+docs/
+vozes/
+saida/
+.claude/
+.codex/
+.github/
+.agents/
+skills/
+memory/
+README.md
+AGENTS.md
+CLAUDE.md
+Dockerfile
+docker-compose.yml
+.dockerignore

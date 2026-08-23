@@ -1,0 +1,45 @@
+# Clonador de Voz Local em contêiner.
+#
+#   docker compose up --build        interface web em http://127.0.0.1:7860
+#   docker compose run --rm cli vozes
+#   docker compose run --rm cli falar jarvis "Olá, mundo."
+#   docker compose run --rm cli checar
+#
+# A porta é publicada apenas em 127.0.0.1: como fora do contêiner, nada é
+# alcançável de outra máquina. Trocar por "7860:7860" exporia a interface na
+# rede local, sem autenticação nenhuma — não faça isso sem colocar um proxy
+# com autenticação na frente.
+
+name: voice-clone
+
+x-comum: &comum
+  build:
+    context: .
+  image: voice-clone:local
+  volumes:
+    # Vozes e áudios ficam no host, não na imagem: são os dados do usuário.
+    - ./vozes:/app/vozes
+    - ./saida:/app/saida
+    # Pesos do XTTS-v2 (~1,8 GB), baixados no primeiro uso.
+    - modelos:/modelos
+  environment:
+    # Limita as threads do BLAS ao que o vozclone.py já decide pelos cores
+    # físicos (ADR-0005); sem isto o OpenMP dentro do contêiner abre uma
+    # thread por core lógico visível e a síntese fica mais lenta.
+    OMP_NUM_THREADS: ${OMP_NUM_THREADS:-4}
+
+services:
+  web:
+    <<: *comum
+    ports:
+      - "127.0.0.1:7860:7860"
+    restart: unless-stopped
+
+  # Mesma imagem, entrada pela CLI. Não sobe junto com o `up`.
+  cli:
+    <<: *comum
+    entrypoint: ["python", "falar.py"]
+    profiles: ["cli"]
+
+volumes:
+  modelos:
