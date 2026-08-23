@@ -1,0 +1,14 @@
+# Configuração do uv para este projeto.
+
+# O projeto usa dois índices: o PyPI e o do PyTorch (declarado em
+# requirements.txt, de onde vêm os wheels +cpu do Linux). Com a estratégia
+# padrão, "first-index", o uv prenderia `torch` ao índice do PyTorch e a
+# instalação quebraria no macOS, que não tem wheels lá. "unsafe-best-match"
+# olha os dois índices e escolhe a melhor versão em cada plataforma:
+# +cpu no Linux e no Windows, PyPI no macOS.
+#
+# O nome do modo alerta para ataques de confusão de dependência — o risco de
+# olhar vários índices para o mesmo pacote. Aqui os dois são de primeira parte
+# (pypi.org e download.pytorch.org) e as versões estão fixadas, então não há
+# margem para um pacote de terceiro entrar no lugar.
+index-strategy = "unsafe-best-match"

@@ -1,0 +1,47 @@
+# Dependências do clonador de voz. Roda em Linux, macOS e Windows.
+#
+#   Linux/macOS:  uv venv --python 3.12 .venv
+#                 VIRTUAL_ENV=.venv uv pip install -r requirements.txt
+#
+#   Windows:      uv venv --python 3.12 .venv
+#                 $env:VIRTUAL_ENV=".venv"; uv pip install -r requirements.txt
+#
+# Depois confirme o ambiente com o comando `checar` da CLI.
+
+# Índice do PyTorch, usado só pelos wheels +cpu do Linux (abaixo).
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# No Linux o wheel do PyPI arrasta ~2,5 GB de CUDA (as dependências nvidia-*
+# têm marker platform_system == "Linux"). O sufixo +cpu existe apenas no índice
+# do PyTorch e prende a resolução ao wheel certo, sem depender de ordem de
+# índice nem de --index-strategy (ADR-0002).
+torch==2.13.0+cpu; sys_platform == "linux"
+torchaudio==2.11.0+cpu; sys_platform == "linux"
+torchcodec==0.16.0+cpu; sys_platform == "linux"
+
+# No macOS e no Windows o wheel do PyPI já é CPU-only — não há CUDA a evitar.
+# macOS exige Apple Silicon: o PyTorch não publica mais wheels para Mac Intel.
+torch==2.13.0; sys_platform != "linux"
+torchaudio==2.11.0; sys_platform != "linux"
+torchcodec==0.16.0; sys_platform != "linux"
+
+# O torchcodec acima é exigido pelo TTS/__init__.py sempre que o PyTorch é
+# >= 2.9 — daí o extra [codec] — mas nunca é importado: o IO de áudio é feito
+# por soundfile em compat.py. No Linux, o wheel do PyPI é ligado a CUDA e não
+# carrega sobre um PyTorch CPU-only; era essa a causa da quebra da clonagem, e
+# é por isso que a linha do Linux pede o +cpu (ADR-0003).
+coqui-tts[codec]>=0.27.5
+
+# Sem pin de série: a 5.x removeu isin_mps_friendly e compat.py repõe o
+# símbolo. Validado com síntese completa em 4.57.6 e 5.15.1 (ADR-0009).
+transformers>=4.57
+
+# IO de áudio e conversão da voz de referência.
+soundfile>=0.13
+librosa>=0.10
+
+# Contagem de cores físicos nas três plataformas (ADR-0005).
+psutil>=5.9
+
+# Interface web local.
+gradio>=5
