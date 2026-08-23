@@ -4,6 +4,14 @@
 import argparse
 import sys
 
+# No Windows, com a saída redirecionada para arquivo ou pipe, o encoding
+# padrão é o do locale (cp1252) e os acentos quebram com UnicodeEncodeError.
+for _fluxo in (sys.stdout, sys.stderr):
+    try:
+        _fluxo.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError, ValueError):
+        pass
+
 from vozclone import IDIOMAS, Resultado, cadastrar_voz, listar_vozes, sintetizar
 
 
@@ -44,6 +52,21 @@ def cmd_falar(args) -> int:
     return 0
 
 
+def cmd_checar(_args) -> int:
+    """Confere as correções de compatibilidade e o ambiente (ver compat.py)."""
+    import compat
+
+    falhas = 0
+    for ok, item, detalhe in compat.verificar():
+        print(f"  {'ok  ' if ok else 'FALHA'} {item}: {detalhe}")
+        falhas += not ok
+    if falhas:
+        print(f"\n{falhas} verificação(ões) falharam — ver docs/MANUAL.md.", file=sys.stderr)
+        return 1
+    print("\nAmbiente consistente.")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="falar.py", description="Clonagem de voz local com XTTS-v2 (pt-BR / en-US)"
@@ -51,6 +74,10 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("vozes", help="lista as vozes cadastradas").set_defaults(func=cmd_vozes)
+
+    sub.add_parser(
+        "checar", help="verifica as correções de compatibilidade e o ambiente"
+    ).set_defaults(func=cmd_checar)
 
     c = sub.add_parser("cadastrar", help="cadastra uma voz a partir de um áudio")
     c.add_argument("nome")
