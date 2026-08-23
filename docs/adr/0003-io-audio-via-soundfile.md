@@ -43,7 +43,8 @@ speakers pré-embutidos.
 
 ## Decisão
 
-Criar o módulo `audio_io.py`, que substitui `torchaudio.load`, `torchaudio.save`
+Criar o módulo `compat.py` (chamado `audio_io.py` até a revisão de
+2026-08-23), que substitui `torchaudio.load`, `torchaudio.save`
 e `torchaudio.info` por implementações baseadas em `soundfile`, preservando a
 assinatura e o contrato originais (tensor `[canais, amostras]` mais taxa de
 amostragem).
@@ -74,5 +75,34 @@ depender de FFmpeg.
 ## Notas
 
 Quando o `torchcodec` publicar wheels CPU-only funcionais, este patch pode ser
-removido. O teste é simples: remover a chamada `audio_io.aplicar()` e verificar
+removido. O teste é simples: remover a chamada `compat.aplicar()` e verificar
 se `falar.py cadastrar` conclui sem erro.
+
+## Revisão — 2026-08-23
+
+**A alternativa 1 partia de uma premissa falsa.** Instalar CUDA não era a única
+forma de satisfazer o `torchcodec`: o índice do PyTorch publica
+`torchcodec==0.16.0+cpu`, um wheel que **não** é ligado a CUDA e carrega
+normalmente sobre o PyTorch CPU-only. O problema nunca foi o `torchcodec` em si,
+e sim o wheel vindo do PyPI, que é o build CUDA. A instalação original pediu
+`coqui-tts[codec]` sem o índice do PyTorch e recebeu o build errado.
+
+O manifesto foi corrigido: no Linux, `requirements.txt` pede o `+cpu`
+([ADR-0010](0010-portabilidade-tres-plataformas.md)). Com isso a causa raiz
+desaparece e `torchaudio.load` volta a funcionar sem patch algum — verificado.
+
+**O patch fica**, agora por decisão de projeto e não por falta de saída:
+
+- Mantém o XTTS fora da pilha FFmpeg do `torchcodec`. O único áudio que chega ao
+  XTTS é o WAV mono 22.05 kHz produzido por `cadastrar_voz`, e o `soundfile`
+  resolve isso sozinho.
+- Faz o sistema sobreviver a um ambiente montado com o wheel errado — instalar
+  sem o índice do PyTorch degrada para o `soundfile` em vez de quebrar. O
+  comando `checar` aponta o wheel errado quando é o caso.
+- O `torchaudio` 2.11 removeu `torchaudio.info`, que o `coqui-tts` ainda chama.
+  O patch repõe.
+
+A guarda do `TTS/__init__.py`, que exige o `torchcodec` instalado com PyTorch
+>= 2.9, continua valendo — daí o extra `[codec]` no manifesto. Neutralizá-la em
+código foi tentado e falha com o `transformers` 5; ver
+[ADR-0009](0009-transformers-5-por-reposicao-de-simbolo.md).

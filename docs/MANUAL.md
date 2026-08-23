@@ -1,6 +1,6 @@
 # Manual do Clonador de Voz Local
 
-**Versão 1.0**
+**Versão 1.1** — inclui execução em contêiner e suporte a Linux, macOS e Windows.
 
 Manual de operação do sistema de clonagem de voz. Para as decisões de
 arquitetura, veja o [SDD](SDD.md), os [ADRs](adr/) e o [modelo C4](c4/).
@@ -26,12 +26,52 @@ características da voz na hora, a cada síntese.
 
 ### Requisitos
 
-Já estão satisfeitos no ambiente instalado em `~/www/voice-clone`:
-
-- Linux com Python 3.12
+- **Python 3.12** (3.10 a 3.13 têm wheels; 3.12 é a versão validada)
 - ~3,5 GB de disco (1,7 GB de ambiente + 1,8 GB de pesos)
 - 4 GB de RAM livres durante a execução
 - Nenhuma GPU necessária
+
+Plataformas suportadas:
+
+| Sistema | Situação |
+|---|---|
+| **Linux** x86-64 ou ARM64 | Validado, e é onde os números de desempenho foram medidos |
+| **Windows** 10/11 x86-64 | Suportado; instalação resolvida e verificada, síntese não medida |
+| **macOS 14+** Apple Silicon | Suportado; o PyTorch não publica mais wheels para Mac Intel |
+
+### Instalação
+
+Com [uv](https://docs.astral.sh/uv/) (recomendado):
+
+```bash
+# Linux e macOS
+uv venv --python 3.12 .venv
+VIRTUAL_ENV=.venv uv pip install -r requirements.txt
+
+# Windows (PowerShell)
+uv venv --python 3.12 .venv
+$env:VIRTUAL_ENV=".venv"; uv pip install -r requirements.txt
+```
+
+O `requirements.txt` carrega as fixações que **não são opcionais** — o wheel
+CPU-only do PyTorch no Linux e as versões compatíveis — e o `uv.toml` a
+configuração de índice que elas pressupõem. Não instale as dependências à mão:
+a chance de trazer 2,5 GB de CUDA inútil, ou o wheel errado do `torchcodec`, é
+alta (ver [ADR-0010](adr/0010-portabilidade-tres-plataformas.md)).
+
+Confirme o resultado antes de qualquer outra coisa:
+
+```bash
+.venv/bin/python falar.py checar      # Windows: .venv\Scripts\python falar.py checar
+```
+
+Todas as linhas devem sair `ok`. Se alguma sair `FALHA`, a própria saída diz o
+que fazer; a seção 8 detalha cada caso.
+
+### Sem instalar nada: Docker
+
+Se preferir não montar o ambiente Python, a seção 6 mostra como rodar tudo em
+contêiner com um comando.
 
 ### Preparando o áudio de referência
 
@@ -61,19 +101,29 @@ A interface web é mais confortável para uso repetido, porque mantém o modelo
 carregado na memória entre as gerações — você paga os ~24 s de carga uma vez só.
 
 ```bash
-cd ~/www/voice-clone
-.venv/bin/python web.py
+cd voice-clone
+.venv/bin/python web.py          # Windows: .venv\Scripts\python web.py
 ```
 
 Abra `http://127.0.0.1:7860` no navegador. O servidor escuta **apenas em
 localhost**: não fica exposto na rede.
 
-**Aba "1. Cadastrar voz"** — dê um nome à voz, grave pelo microfone ou envie um
-arquivo, e clique em *Cadastrar voz*. A voz passa a aparecer na segunda aba.
+A interface tem paridade com a CLI: tudo que `falar.py` faz, ela faz.
 
-**Aba "2. Falar"** — selecione a voz, escreva o texto, escolha o idioma e clique
-em *Gerar áudio*. O player aparece logo abaixo, junto com o tempo que a geração
-levou.
+**Aba "1. Vozes"** — à esquerda, o cadastro: dê um nome à voz, grave pelo
+microfone ou envie um arquivo, e clique em *Cadastrar voz*. À direita, a lista
+das vozes já cadastradas com a duração de cada referência — equivale a
+`falar.py vozes`.
+
+**Aba "2. Falar"** — selecione a voz, escreva o texto **ou** envie um `.txt`
+(que tem precedência, como o `-f` da CLI), escolha idioma, velocidade e, se
+quiser, o nome do arquivo de saída. *Gerar áudio* mostra o player, um botão de
+download e o tempo que a geração levou. *Pré-carregar modelo* paga os ~24 s de
+carga na hora que você escolher, em vez de na primeira geração.
+
+**Aba "3. Ambiente"** — equivale a `falar.py checar`: confere as correções de
+compatibilidade e o ambiente de execução. É o primeiro lugar a olhar quando algo
+para de funcionar.
 
 Para encerrar, `Ctrl+C` no terminal.
 
@@ -93,11 +143,25 @@ então prefira gerar textos longos de uma vez em vez de muitas chamadas curtas.
 O nome (`douglas`) é como você vai se referir à voz depois. Cadastrar de novo
 com o mesmo nome substitui a referência anterior.
 
+No Windows, troque `.venv/bin/python` por `.venv\Scripts\python` em todos os
+exemplos abaixo.
+
 ### Listar vozes
 
 ```bash
 .venv/bin/python falar.py vozes
 ```
+
+### Verificar o ambiente
+
+```bash
+.venv/bin/python falar.py checar
+```
+
+Confere, no ambiente real e não em metadados, que as correções de
+compatibilidade estão ativas, que o PyTorch é CPU-only, que os wheels certos
+foram instalados e que o `TTS` sobe. É o primeiro comando a rodar depois de
+instalar e depois de qualquer atualização de dependência.
 
 ### Gerar áudio
 
@@ -125,6 +189,11 @@ com o mesmo nome substitui a referência anterior.
 | `-v`, `--velocidade` | 0.6 a 1.4 — ritmo da fala (padrão 1.0) |
 | `-r`, `--rapido` | Quantização int8: ~20% mais rápido, leve perda de fidelidade |
 
+Nomes de voz e de arquivo de saída passam por validação: os caracteres que o
+Windows recusa (`< > : " / \ | ? *`), os nomes reservados (`CON`, `NUL`,
+`COM1`…) e ponto ou espaço no fim são rejeitados em todas as plataformas, para
+que uma voz cadastrada num sistema tenha nome válido nos outros.
+
 ---
 
 ## 5. Uso como biblioteca Python
@@ -143,9 +212,59 @@ as chamadas seguintes de `sintetizar` reaproveitam o modelo já em memória.
 
 ---
 
-## 6. O que esperar de desempenho
+## 6. Uso em contêiner
 
-Medido em Intel i7-8565U (4 cores, sem GPU), governor `powersave`:
+Roda a mesma aplicação sem montar ambiente Python na máquina. Requer Docker com
+o plugin Compose.
+
+```bash
+docker compose up --build
+```
+
+A interface fica em `http://127.0.0.1:7860`. A porta é publicada **apenas em
+127.0.0.1**: como na execução local, nada é alcançável de outra máquina.
+
+A CLI usa a mesma imagem:
+
+```bash
+docker compose run --rm cli checar
+docker compose run --rm cli vozes
+docker compose run --rm cli cadastrar douglas /app/vozes/origem.wav
+docker compose run --rm cli falar douglas "Olá, mundo."
+```
+
+### O que fica onde
+
+| Caminho | Onde vive | Por quê |
+|---|---|---|
+| `./vozes` | Host, montado em `/app/vozes` | São os seus dados; não devem morar na imagem |
+| `./saida` | Host, montado em `/app/saida` | Os áudios gerados ficam acessíveis fora do contêiner |
+| Volume `modelos` | Volume nomeado, em `/modelos` | Os 1,8 GB de pesos sobrevivem a `down` e a rebuild |
+
+O primeiro `up` baixa os pesos (1,8 GB) e leva alguns minutos. Do segundo em
+diante, o volume já os tem.
+
+### Notas
+
+- **A imagem não embute o modelo.** Isso a mantém em ~1,5 GB em vez de ~3,3 GB, e
+  evita distribuir pesos sob CPML.
+- **Sem CUDA e sem FFmpeg.** A imagem é CPU-only por construção, e o `soundfile`
+  traz o `libsndfile` no próprio wheel (ver [ADR-0003](adr/0003-io-audio-via-soundfile.md)).
+- **UID/GID 1000** dentro do contêiner, para que os arquivos criados em `vozes/`
+  e `saida/` continuem seus no host. Se o seu usuário tem outro UID, ajuste no
+  `Dockerfile`.
+- **Threads:** `OMP_NUM_THREADS` no `docker-compose.yml` está em 4. Ajuste para o
+  número de **cores físicos** da sua máquina — não os lógicos (seção 7).
+- Encerre com `Ctrl+C` e, se quiser remover os contêineres, `docker compose down`.
+  Os pesos ficam: só `docker compose down -v` apaga o volume.
+
+---
+
+## 7. O que esperar de desempenho
+
+Medido em Intel i7-8565U (4 cores, sem GPU), governor `powersave`, Linux. **É a
+única máquina onde a síntese foi cronometrada** — em macOS e Windows a
+instalação foi verificada, o desempenho não.
 
 | Tarefa | Tempo |
 |---|---|
@@ -169,12 +288,19 @@ conversação ao vivo.
    ```bash
    sudo cpupower frequency-set -g performance
    ```
-4. **Não aumente o número de threads.** Já está fixado nos 4 cores físicos.
-   Usar as 8 threads lógicas mede 2,5x **mais lento** neste modelo.
+4. **Não aumente o número de threads.** O sistema já detecta os cores físicos e
+   se fixa neles. Usar as threads lógicas mede 2,5x **mais lento** neste modelo.
+   Em contêiner, o mesmo vale para `OMP_NUM_THREADS` no `docker-compose.yml`.
 
 ---
 
-## 7. Solução de problemas
+## 8. Solução de problemas
+
+**Comece sempre por `falar.py checar`.** Ele distingue os modos de falha
+conhecidos e diz qual é o seu, em vez de deixar você adivinhar a partir de um
+traceback. Na interface web, a aba "3. Ambiente" faz o mesmo.
+
+### Erros de uso
 
 **"Referência de X s é curta demais"** — o áudio tem menos de 6 s. Grave mais.
 
@@ -192,21 +318,74 @@ de exceções.
 **Parece travado em textos longos** — não está: o modelo processa frase a frase.
 Um parágrafo leva perto de um minuto. Acompanhe pelo terminal.
 
-**`OSError: Could not load this library: libtorchcodec_image.so`** — o patch de
-IO de áudio não foi aplicado. Isso acontece se algum código importar `TTS` antes
-de `vozclone`. Sempre importe `vozclone` primeiro (ver [ADR-0003](adr/0003-io-audio-via-soundfile.md)).
+**"O nome não pode conter < > : " / \ | ? *"** ou **"é um nome reservado pelo
+Windows"** — o nome da voz vira nome de arquivo e precisa ser válido nas três
+plataformas. Escolha outro.
 
-**`ImportError: cannot import name 'isin_mps_friendly'`** — o `transformers`
-subiu para a série 5.x. Reinstale com `uv pip install "transformers<5"`
-(ver [ADR-0004](adr/0004-fixar-transformers-4x.md)).
+### Erros de ambiente
 
-**Sem espaço em disco** — os pesos ficam em `~/.local/share/tts` (1,8 GB) e o
-ambiente em `~/www/voice-clone/.venv` (1,7 GB). Os áudios gerados se acumulam em
-`saida/` e podem ser apagados à vontade.
+**`checar` diz `torchcodec ... ligado a CUDA`** — o ambiente foi montado com o
+wheel do PyPI em vez do `+cpu`. A síntese continua funcionando, porque o IO de
+áudio é feito por `soundfile`, mas conserte a origem:
+
+```bash
+VIRTUAL_ENV=.venv uv pip install -r requirements.txt
+```
+
+**`OSError: Could not load this library: libtorchcodec_image.so`** — a mesma
+causa acima, agora fatal: algum código importou `torchcodec` diretamente, ou
+importou `TTS` antes de `vozclone`. Sempre importe `vozclone` primeiro; ele
+aplica as correções antes de tocar no `TTS`
+(ver [ADR-0003](adr/0003-io-audio-via-soundfile.md)).
+
+**`ImportError: cannot import name 'isin_mps_friendly'`** — o `TTS` foi
+importado sem as correções, novamente por ordem de import. O `compat.py` repõe
+esse símbolo, o que faz o projeto funcionar tanto no `transformers` 4.x quanto
+no 5.x; **não** é mais necessário fixar `transformers<5`
+(ver [ADR-0009](adr/0009-transformers-5-por-reposicao-de-simbolo.md)).
+
+**`checar` diz que o `transformers` está fora das versões validadas** — é aviso,
+não erro: a síntese pode funcionar. As versões testadas de ponta a ponta estão
+em `compat.TRANSFORMERS_VALIDADO`. Se algo quebrar, volte para uma delas.
+
+**`checar` diz `build CUDA ... inesperado`** — o PyTorch instalado é o de GPU.
+Numa máquina sem GPU ele só ocupa disco; reinstale pelo `requirements.txt`
+(ver [ADR-0002](adr/0002-pytorch-cpu-only.md)).
+
+**Acentos saem corrompidos ao redirecionar a saída no Windows** — a CLI força
+UTF-8 na saída. Se ainda ocorrer, defina `PYTHONIOENCODING=utf-8`.
+
+**"Modo rápido indisponível nesta CPU"** — o backend de quantização int8 não
+existe para essa arquitetura. A síntese continua em float32, apenas sem o ganho
+de ~20%.
+
+**No macOS, `uv pip install` não acha wheel do PyTorch** — o PyTorch não publica
+mais wheels para Mac Intel, e os de 2.12+ exigem macOS 14. Num Mac Intel é
+preciso recuar as versões no `requirements.txt`
+(ver [ADR-0010](adr/0010-portabilidade-tres-plataformas.md)).
+
+### Docker
+
+**O primeiro `up` parece parado** — está baixando 1,8 GB de pesos. Acompanhe com
+`docker compose logs -f`.
+
+**Os pesos são baixados de novo a cada `up`** — o volume `modelos` foi removido,
+provavelmente por um `docker compose down -v`.
+
+**Permissão negada em `vozes/` ou `saida/`** — o contêiner roda como UID 1000. Se
+o seu usuário tem outro UID (`id -u`), ajuste no `Dockerfile`.
+
+### Disco
+
+**Sem espaço em disco** — os pesos ficam em `~/.local/share/tts` no Linux,
+`~/Library/Application Support/tts` no macOS e `%LOCALAPPDATA%\tts` no Windows
+(1,8 GB); em contêiner, no volume `modelos`. O ambiente virtual ocupa ~1,7 GB.
+Os áudios gerados se acumulam em `saida/` e podem ser apagados à vontade. A
+variável `TTS_HOME` move o cache dos pesos para outro lugar.
 
 ---
 
-## 8. Limites conhecidos
+## 9. Limites conhecidos
 
 - **Dois idiomas apenas** nesta configuração (pt-BR e en-US), embora o XTTS-v2
   suporte 17. Foi uma restrição de escopo, não do modelo.
@@ -217,10 +396,14 @@ ambiente em `~/www/voice-clone/.venv` (1,7 GB). Os áudios gerados se acumulam e
   arquivo.
 - **Não determinístico** — o mesmo texto gera áudios ligeiramente diferentes a
   cada execução.
+- **Desempenho medido só em Linux.** Em macOS e Windows a instalação foi
+  verificada; a síntese não foi cronometrada.
+- **Sem testes automatizados.** A verificação é `falar.py checar` mais uma
+  síntese real.
 
 ---
 
-## 9. Uso responsável e segurança da informação
+## 10. Uso responsável e segurança da informação
 
 **Consentimento é obrigatório.** Clonar a voz de uma pessoa exige autorização
 explícita dela. Não use o sistema para imitar terceiros sem permissão, nem para

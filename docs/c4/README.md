@@ -98,19 +98,23 @@ graph TB
     cli["<b>CLI</b> / <b>Web</b><br/><i>[chamadores]</i>"]
 
     subgraph nucleo["Núcleo de Voz — vozclone.py"]
-        bootstrap["<b>Bootstrap de ambiente</b><br/>Aceita a CPML, aplica o patch de IO<br/>e fixa as threads nos cores físicos.<br/><i>Executa no import — a ordem importa.</i>"]
+        bootstrap["<b>Bootstrap de ambiente</b><br/>Aceita a CPML, aplica as correções<br/>e fixa as threads nos cores físicos.<br/><i>Executa no import — a ordem importa.</i>"]
         cadastro["<b>Cadastro de vozes</b><br/><i>cadastrar_voz, listar_vozes, caminho_voz</i><br/>Converte para mono 22.05 kHz, valida<br/>a duração (6-30s) e normaliza o volume."]
         sintese["<b>Síntese</b><br/><i>sintetizar</i><br/>Valida entrada, resolve a saída,<br/>quebra em frases e mede o tempo."]
         modelo["<b>Gestão do modelo</b><br/><i>carregar_modelo</i><br/>Singleton por processo.<br/>Quantização int8 opcional."]
         resultado["<b>Resultado</b><br/><i>[dataclass]</i><br/>caminho, duração, tempo<br/>e fator de tempo real."]
+        validacao["<b>Validação de nome</b><br/><i>validar_nome</i><br/>Regras de nome de arquivo do<br/>sistema mais restritivo dos três."]
     end
 
-    io["<b>audio_io.py</b><br/><i>[patch]</i><br/>Substitui load/save/info do<br/>torchaudio por soundfile."]
+    io["<b>compat.py</b><br/><i>[correções + diagnóstico]</i><br/>Substitui load/save/info do torchaudio<br/>por soundfile, repõe isin_mps_friendly<br/>e expõe verificar()."]
     ext["<b>librosa</b> / <b>soundfile</b><br/><i>[IO e resample]</i>"]
     tts["<b>coqui-tts</b> → <b>XTTS-v2</b><br/><i>[PyTorch CPU]</i>"]
 
     cli --> cadastro
     cli --> sintese
+    cli -->|"checar /<br/>aba Ambiente"| io
+    cadastro --> validacao
+    sintese --> validacao
     bootstrap -.->|"aplica antes<br/>de importar TTS"| io
     cadastro --> ext
     sintese --> modelo
@@ -122,20 +126,25 @@ graph TB
 
     classDef comp fill:#85bbf0,stroke:#5d82a8,color:#000
     classDef libs fill:#999,stroke:#6b6b6b,color:#fff
-    class bootstrap,cadastro,sintese,modelo,resultado comp
+    class bootstrap,cadastro,sintese,modelo,resultado,validacao comp
     class io,ext,tts libs
 ```
 
-Dois pontos merecem atenção nesse nível.
+Três pontos merecem atenção nesse nível.
 
 **O bootstrap executa no import e tem ordem obrigatória.** A CPML é aceita, o
 patch de IO é aplicado e as threads são fixadas *antes* de `TTS` ser importado.
 Inverter essa ordem faz a clonagem falhar com um erro de biblioteca compartilhada
 ([ADR-0003](../adr/0003-io-audio-via-soundfile.md)).
 
-**A seta de volta do XTTS para o `audio_io`** é o que justifica o patch existir:
+**A seta de volta do XTTS para o `compat`** é o que justifica o patch existir:
 o motor chama `torchaudio.load` internamente para ler a voz de referência, e é
 exatamente essa chamada que estava quebrada.
+
+**A seta direta das interfaces para o `compat`** é o diagnóstico: `verificar()`
+confere, em tempo de execução, que os patches estão ativos e que os wheels
+certos foram instalados. É o que `falar.py checar` e a aba "Ambiente" da web
+expõem, e torna explícito um acoplamento que antes era só convenção.
 
 ---
 
@@ -208,7 +217,9 @@ longos consomem memória de forma insustentável em CPU.
 |---|---|
 | Motor XTTS-v2 | [0001](../adr/0001-motor-tts-xtts-v2.md) |
 | PyTorch CPU-only | [0002](../adr/0002-pytorch-cpu-only.md) |
-| `audio_io.py` | [0003](../adr/0003-io-audio-via-soundfile.md) |
+| `compat.py` — IO de áudio | [0003](../adr/0003-io-audio-via-soundfile.md) |
+| `compat.py` — `isin_mps_friendly` | [0009](../adr/0009-transformers-5-por-reposicao-de-simbolo.md) |
+| Validação de nome, detecção de cores | [0010](../adr/0010-portabilidade-tres-plataformas.md) |
 | Bootstrap — threads | [0005](../adr/0005-threads-cores-fisicos.md) |
 | Gestão do modelo — int8 | [0006](../adr/0006-quantizacao-int8-opcional.md) |
 | CLI e Web | [0007](../adr/0007-interfaces-cli-e-web.md) |

@@ -1,6 +1,6 @@
 # ADR-0004 — Fixar `transformers` na série 4.x
 
-**Status:** Aceito · **Data:** 2026-08-23
+**Status:** Substituído por [ADR-0009](0009-transformers-5-por-reposicao-de-simbolo.md) · **Data:** 2026-08-23
 
 ## Contexto
 
@@ -37,3 +37,12 @@ Fixar a dependência em `transformers<5`. A resolução instalou `4.57.6`, com o
 
 A restrição sai quando o `coqui-tts` publicar suporte à série 5.x. Até lá, o pin
 é obrigatório.
+
+## Revisão — 2026-08-23
+
+O diagnóstico acima está correto, mas a conclusão era mais forte do que os fatos
+pediam. O pin foi tratado como inevitável sem que se medisse o tamanho da
+incompatibilidade: é **um símbolo**, com implementação de duas linhas. Repô-lo
+custa menos que ficar preso à série 4.x, e a série 5.x foi validada com síntese
+completa. Ver [ADR-0009](0009-transformers-5-por-reposicao-de-simbolo.md), que
+substitui esta decisão.

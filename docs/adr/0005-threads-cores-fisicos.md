@@ -48,3 +48,11 @@ uso como biblioteca herdam o mesmo comportamento.
 
 Medição feita com governor `powersave`. Com `performance`, os números absolutos
 melhoram, mas a relação entre 4 e 8 threads deve se manter.
+
+## Revisão — 2026-08-23
+
+A leitura de `/sys/devices/system/cpu/cpu0/topology/thread_siblings_list` só
+existe no Linux. A detecção passou a usar `psutil.cpu_count(logical=False)`, que
+responde nas três plataformas, com `/sys` e `sysctl` como recuos e a divisão por
+dois em último lugar — em CPUs sem SMT ela erraria por metade. Ver
+[ADR-0010](0010-portabilidade-tres-plataformas.md).

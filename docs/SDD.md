@@ -88,7 +88,7 @@ Interfaces      falar.py (CLI)        web.py (Gradio, localhost)
                         \                  /
 Núcleo                   vozclone.py — regra, validação, orquestração
                                  |
-Infraestrutura      audio_io.py → coqui-tts/XTTS-v2 → PyTorch CPU
+Infraestrutura       compat.py → coqui-tts/XTTS-v2 → PyTorch CPU
 ```
 
 O princípio que organiza o desenho: **as interfaces não contêm regra de
@@ -103,10 +103,19 @@ Os diagramas completos estão no [modelo C4](c4/README.md).
 
 | Arquivo | Responsabilidade | Linhas |
 |---|---|---|
-| `vozclone.py` | Núcleo: cadastro, síntese, gestão do modelo, tuning de CPU | ~185 |
-| `audio_io.py` | Patch de IO de áudio sobre o torchaudio | ~55 |
-| `falar.py` | CLI com três subcomandos | ~85 |
-| `web.py` | Interface Gradio | ~75 |
+| `vozclone.py` | Núcleo: cadastro, síntese, validação, gestão do modelo, tuning de CPU | ~235 |
+| `compat.py` | Correções de compatibilidade do ecossistema e diagnóstico do ambiente | ~215 |
+| `falar.py` | CLI com quatro subcomandos | ~100 |
+| `web.py` | Interface Gradio, com paridade à CLI | ~230 |
+
+Artefatos de empacotamento e distribuição:
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `requirements.txt` | Dependências e as fixações que não são opcionais, com markers por plataforma |
+| `uv.toml` | Estratégia de índice que essas fixações pressupõem |
+| `Dockerfile` | Imagem CPU-only em dois estágios, usuário não root |
+| `docker-compose.yml` | Serviços `web` e `cli`, volumes de dados e de pesos, porta em localhost |
 
 ---
 
@@ -117,8 +126,8 @@ Os diagramas completos estão no [modelo C4](c4/README.md).
 Executado na importação de `vozclone.py`, em ordem obrigatória:
 
 1. `COQUI_TOS_AGREED=1` — aceite da CPML, exigido pelo `coqui-tts`.
-2. `audio_io.aplicar()` — substitui o IO do torchaudio **antes** de qualquer
-   import de `TTS`.
+2. `compat.aplicar()` — repõe `isin_mps_friendly` e substitui o IO do torchaudio
+   **antes** de qualquer import de `TTS`.
 3. `torch.set_num_threads(cores_físicos)` — ver §6.
 
 A ordem não é estilística. O passo 2 precisa preceder o import de `TTS`, porque
@@ -127,7 +136,10 @@ bibliotecas compartilhadas do torchcodec acontece no import. Um chamador que
 importe `TTS` diretamente, antes de `vozclone`, reintroduz a falha.
 
 Este acoplamento é a principal fragilidade do desenho e está registrado no
-[ADR-0003](adr/0003-io-audio-via-soundfile.md).
+[ADR-0003](adr/0003-io-audio-via-soundfile.md). `compat.verificar()`, exposto
+como `falar.py checar` e como a aba "Ambiente" da web, confere em tempo de
+execução que os patches estão ativos e que os wheels certos foram instalados —
+transformando um acoplamento implícito em verificação explícita.
 
 ### 4.2 Modelo de dados
 
@@ -231,6 +243,7 @@ sintetizar(texto, voz, idioma="pt-br", saida=None,
 ### 5.2 CLI
 
 ```
+falar.py checar
 falar.py cadastrar <nome> <audio>
 falar.py vozes
 falar.py falar <voz> [texto] [-f arquivo] [-i pt-br|en-us]
@@ -242,9 +255,28 @@ Códigos de saída: `0` sucesso, `1` erro tratado, `2` erro de argumentos
 
 ### 5.3 Web
 
-Gradio em `127.0.0.1:7860`, duas abas (cadastro e síntese). O bind em localhost
-é explícito e `share=True` não é usado — expor por túnel público um serviço que
-processa dado biométrico contrariaria o requisito de operação local.
+Gradio em `127.0.0.1:7860`, três abas com **paridade completa à CLI**:
+
+| Aba | Comando equivalente |
+|---|---|
+| 1. Vozes | `vozes` e `cadastrar` |
+| 2. Falar | `falar`, incluindo `-f`, `-o`, `-i`, `-v` e `-r` |
+| 3. Ambiente | `checar` |
+
+O bind em localhost é explícito e `share=True` não é usado — expor por túnel
+público um serviço que processa dado biométrico contrariaria o requisito de
+operação local. O host é configurável por `VOICE_CLONE_HOST` porque no contêiner
+é preciso escutar em `0.0.0.0` para que a porta seja publicável; o
+`docker-compose.yml` publica apenas em `127.0.0.1` do host, preservando a mesma
+garantia.
+
+### 5.4 Contêiner
+
+Imagem CPU-only em dois estágios, sem CUDA e sem FFmpeg, rodando como usuário
+não root (UID/GID 1000). Os pesos do modelo **não** são embutidos: ficam num
+volume nomeado apontado por `TTS_HOME`, o que mantém a imagem em ~1,5 GB e evita
+distribuir pesos sob CPML. `vozes/` e `saida/` são bind mounts do host. O serviço
+`cli` compartilha a imagem com entrypoint em `falar.py`.
 
 ---
 
@@ -340,21 +372,27 @@ pessoal.
 |---|---|---|---|
 | `torch` | 2.13.0+cpu | Runtime de inferência | Build CPU-only deliberado |
 | `coqui-tts[codec]` | 0.27.5 | XTTS-v2 | Fork comunitário; o original foi abandonado |
-| `transformers` | <5 (4.57.6) | Backbone do GPT | **Pin obrigatório** |
+| `torchcodec` | 0.16.0+cpu | Exigido pela guarda do `coqui-tts` | Nunca importado; no Linux o wheel do PyPI é CUDA e não serve |
+| `transformers` | >=4.57 (4.57.6 e 5.15.1 validados) | Backbone do GPT | Sem pin de série desde o ADR-0009 |
 | `librosa` / `soundfile` | 1.0.0 / 0.14.0 | IO de áudio | Substituem o torchaudio |
-| `gradio` | — | Interface web | Só a interface depende |
+| `psutil` | >=5.9 | Cores físicos nas três plataformas | Já vinha como transitiva |
+| `gradio` | >=5 | Interface web | Só a interface depende |
 
 ### 8.2 Incompatibilidades resolvidas
 
-Três quebras reais do ecossistema, encontradas na montagem:
+Quatro quebras reais do ecossistema. Duas são resolvidas em código, duas na
+instalação; `compat.verificar()` confirma cada uma no ambiente real.
 
-1. **`transformers` 5.x removeu `isin_mps_friendly`**, usado pelo backbone
-   Tortoise do XTTS. Resolvido com `transformers<5` ([ADR-0004](adr/0004-fixar-transformers-4x.md)).
-2. **`torchaudio` 2.9+ delegou o IO ao `torchcodec`**, cujo wheel é compilado
-   contra CUDA e não carrega sobre PyTorch CPU-only. Quebrava justamente a
-   leitura da voz de referência. Resolvido com `audio_io.py`
-   ([ADR-0003](adr/0003-io-audio-via-soundfile.md)).
-3. **`coqui-tts` passou a exigir o extra `[codec]`** com PyTorch 2.9+.
+| # | Incompatibilidade | Onde se resolve | ADR |
+|---|---|---|---|
+| 1 | `transformers` 5.x removeu `isin_mps_friendly`, que o backbone Tortoise do XTTS importa | Código: `compat.py` repõe o símbolo sobre `torch.isin`. Sem pin de série | [0009](adr/0009-transformers-5-por-reposicao-de-simbolo.md) |
+| 2 | O wheel do `torchcodec` no PyPI é ligado a CUDA e não carrega sobre PyTorch CPU-only; o `torchaudio` 2.9+ delega o IO a ele, quebrando a leitura da voz de referência | Instalação: no Linux o manifesto pede o wheel `+cpu` do índice do PyTorch | [0003](adr/0003-io-audio-via-soundfile.md) |
+| 3 | O `torchaudio` 2.11 removeu `torchaudio.info`, ainda chamado pelo `coqui-tts` | Código: `compat.py` redireciona `load`/`save`/`info` para o `soundfile` | [0003](adr/0003-io-audio-via-soundfile.md) |
+| 4 | O `TTS/__init__.py` exige o `torchcodec` instalado com PyTorch 2.9+, mesmo sem usá-lo | Instalação: extra `coqui-tts[codec]`. Neutralizar a guarda em código quebra o `transformers` 5 | [0009](adr/0009-transformers-5-por-reposicao-de-simbolo.md) |
+
+O patch de IO (3) segue ativo mesmo com o wheel correto de (2), por decisão de
+projeto: mantém o XTTS fora da pilha FFmpeg do `torchcodec` e faz o sistema
+degradar, em vez de quebrar, num ambiente montado com o wheel errado.
 
 ### 8.3 Riscos de manutenção
 
@@ -362,8 +400,11 @@ Três quebras reais do ecossistema, encontradas na montagem:
 |---|---|---|
 | Abandono do fork `coqui-tts` | Alto | Ambiente fixado e funcional; migração para Chatterbox é o plano B |
 | Remoção da API de quantização do PyTorch | Baixo | O modo rápido é opcional; o padrão não depende dele |
-| Reinstalação sem o pin de `transformers` | Médio | Documentado no README, no manual e em ADR |
-| Mudança interna do XTTS no uso do `torchaudio` | Médio | Teste de fumaça: cadastrar uma voz e sintetizar |
+| Reinstalação trazendo o wheel errado | Médio | Fixações no `requirements.txt`, e `falar.py checar` detecta e nomeia o problema |
+| `transformers` 6.x removendo outro símbolo | Médio | `checar` avisa fora da faixa validada; o patch é de duas linhas e localizado |
+| Mudança interna do XTTS no uso do `torchaudio` | Médio | Teste de fumaça: `checar`, cadastrar uma voz e sintetizar (skill `smoke-test`) |
+| Ausência de testes automatizados | Médio | A verificação é manual e documentada; nenhum CI a exerce |
+| Desempenho não medido em macOS e Windows | Baixo | Instalação verificada nas três plataformas; medição só no Linux |
 
 ---
 
