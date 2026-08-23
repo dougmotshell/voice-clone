@@ -1,0 +1,4 @@
+.venv/
+vozes/*.wav
+saida/*.wav
+__pycache__/
