@@ -87,6 +87,12 @@ O desenho é deliberadamente simples: **as interfaces são casca fina sobre o
 núcleo**. Nem a CLI nem a web contêm regra de negócio, o que permite adicionar
 uma terceira interface sem tocar na lógica ([ADR-0007](../adr/0007-interfaces-cli-e-web.md)).
 
+`vozes/` e `saida/` são resolvidos ao lado de `vozclone.py`, então o endereço
+concreto depende de onde o sistema foi instalado: a raiz do clone, ou
+`~/.local/share/voice-clone/` quando a instalação veio pelo script
+([ADR-0011](../adr/0011-instalacao-por-script.md)). Os pesos ficam fora do
+prefixo nos dois casos, e são compartilhados entre instalações.
+
 ---
 
 ## Nível 3 — Componente (Núcleo de Voz)
@@ -224,3 +230,4 @@ longos consomem memória de forma insustentável em CPU.
 | Gestão do modelo — int8 | [0006](../adr/0006-quantizacao-int8-opcional.md) |
 | CLI e Web | [0007](../adr/0007-interfaces-cli-e-web.md) |
 | `vozes/` no filesystem | [0008](../adr/0008-vozes-como-arquivos-locais.md) |
+| Onde os depósitos de dados ficam, por instalação | [0011](../adr/0011-instalacao-por-script.md) |

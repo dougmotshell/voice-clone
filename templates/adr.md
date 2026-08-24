@@ -34,6 +34,3 @@ que materializa a decisão, quando houver.
 
 Tentativas que falharam, condições em que a decisão deve ser reavaliada,
 ponteiros para os documentos que mudaram junto.
-
----
-*Classificação ISO/IEC 27001: Uso Interno. Documento técnico sem dados pessoais.*

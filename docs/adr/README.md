@@ -18,6 +18,7 @@ Status possíveis: `Proposto`, `Aceito`, `Substituído por ADR-XXXX`, `Obsoleto`
 | [0008](0008-vozes-como-arquivos-locais.md) | Vozes como arquivos WAV no filesystem | Aceito |
 | [0009](0009-transformers-5-por-reposicao-de-simbolo.md) | Compatibilidade com `transformers` 5 por reposição de símbolo | Aceito |
 | [0010](0010-portabilidade-tres-plataformas.md) | Suporte a Linux, macOS e Windows | Aceito |
+| [0011](0011-instalacao-por-script.md) | Instalação e desinstalação por script | Aceito |
 
 ## Decisões pendentes
 

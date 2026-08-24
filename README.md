@@ -33,8 +33,58 @@ pt-BR e en-US.
 
 ## Instalação
 
+Exige o [uv](https://docs.astral.sh/uv/), que é quem resolve os wheels certos.
 Toda a configuração está em `requirements.txt` e `uv.toml` — não instale as
 dependências à mão.
+
+### Para usar: o script de instalação
+
+Não clona o repositório. Baixa os sete arquivos que a execução exige, monta o
+ambiente, cria os atalhos `voice-clone` e `voice-clone-web`, e roda a verificação
+no fim ([ADR-0011](docs/adr/0011-instalacao-por-script.md)).
+
+Baixe, leia, execute:
+
+```bash
+# Linux e macOS
+curl -fsSLO https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.sh
+less install.sh
+sh install.sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.ps1 -OutFile install.ps1
+notepad install.ps1
+.\install.ps1
+```
+
+Ou em uma linha, aceitando executar código que você não leu:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.sh | sh
+```
+
+```powershell
+irm https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.ps1 | iex
+```
+
+Instala em `~/.local/share/voice-clone` (`%LOCALAPPDATA%\voice-clone` no
+Windows), com as vozes e os áudios lá dentro. `--prefixo` muda o destino,
+`--ref <sha>` amarra a um commit exato, `--ajuda` lista o resto.
+
+**Para desinstalar**, o script fica no próprio prefixo:
+
+```bash
+~/.local/share/voice-clone/uninstall.sh --simular   # veja antes o que sai
+~/.local/share/voice-clone/uninstall.sh             # remove o programa
+```
+
+Ele **preserva** `vozes/` e `saida/` e os 1,8 GB de pesos por padrão;
+`--remover-dados`, `--remover-modelos` e `--tudo` removem, com confirmação.
+Detalhes na [seção 9 do manual](docs/MANUAL.md).
+
+### Para desenvolver: a partir de um clone
 
 ```bash
 # Linux e macOS
@@ -49,7 +99,8 @@ $env:VIRTUAL_ENV=".venv"; uv pip install -r requirements.txt
 Confirme o ambiente antes de usar:
 
 ```bash
-.venv/bin/python falar.py checar     # Windows: .venv\Scripts\python falar.py checar
+voice-clone checar                   # instalado pelo script
+.venv/bin/python falar.py checar     # no clone; Windows: .venv\Scripts\python falar.py checar
 ```
 
 ```
@@ -89,12 +140,14 @@ Requisitos por plataforma:
 ```
 
 Rode com `.venv/bin/python falar.py ...` se o shebang não pegar o venv, e com
-`.venv\Scripts\python falar.py ...` no Windows.
+`.venv\Scripts\python falar.py ...` no Windows. Instalado pelo script, o comando
+é `voice-clone <subcomando>`, de qualquer diretório.
 
 ## Interface web
 
 ```bash
-.venv/bin/python web.py
+voice-clone-web            # instalado pelo script
+.venv/bin/python web.py    # a partir de um clone
 ```
 
 Abre em `http://127.0.0.1:7860`, apenas em localhost. Tem **paridade completa
@@ -129,10 +182,16 @@ requirements.txt  dependências, com as fixações que não são opcionais
 uv.toml           configuração de índice que essas fixações pressupõem
 Dockerfile        imagem CPU-only, em dois estágios
 docker-compose.yml serviços web e cli, volumes e porta em localhost
+scripts/install.sh, uninstall.sh      instalação e remoção em Linux e macOS
+scripts/install.ps1, uninstall.ps1    o mesmo no Windows
 vozes/            referências cadastradas (.wav mono 22.05 kHz)
 saida/            áudios gerados
 AGENTS.md         contrato para agentes de IA; ver também scripts/sync-ai-surfaces.py
 ```
+
+Os quatro primeiros arquivos, mais `requirements.txt`, `uv.toml` e `LICENSE`, são
+exatamente o que o instalador baixa — o resto da árvore não participa de uma
+síntese.
 
 ## Desempenho medido neste laptop
 

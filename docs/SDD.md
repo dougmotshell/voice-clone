@@ -116,6 +116,15 @@ Artefatos de empacotamento e distribuição:
 | `uv.toml` | Estratégia de índice que essas fixações pressupõem |
 | `Dockerfile` | Imagem CPU-only em dois estágios, usuário não root |
 | `docker-compose.yml` | Serviços `web` e `cli`, volumes de dados e de pesos, porta em localhost |
+| `scripts/install.sh`, `scripts/uninstall.sh` | Instalação e remoção em Linux e macOS |
+| `scripts/install.ps1`, `scripts/uninstall.ps1` | O mesmo no Windows |
+
+Os quatro scripts nomeiam, cada um, a lista dos arquivos que a execução exige —
+os quatro módulos acima mais `requirements.txt`, `uv.toml` e `LICENSE`. É essa
+lista, e não um clone da árvore, que define o que uma instalação contém
+([ADR-0011](adr/0011-instalacao-por-script.md)). A duplicação da lista entre os
+scripts e o `Dockerfile` é o custo aceito, e está registrada como consequência
+negativa naquele ADR.
 
 ---
 
@@ -340,8 +349,21 @@ de ambiente virtual e 1,8 GB de pesos.
   requisições de rede. Áudio de voz nunca sai da máquina.
 - **Bind restrito a `127.0.0.1`**, sem compartilhamento remoto do Gradio.
 - **`.gitignore`** cobre `vozes/`, `saida/` e `.venv/`.
+- **Nome de voz e de saída sanitizados** por `vozclone.validar_nome()`, chamada
+  no cadastro, na busca e no nome de saída da web. Recusa `/`, `\`, `< > : " | ? *`,
+  caracteres de controle, ponto ou espaço final, nomes de dispositivo do Windows
+  — com ou sem extensão — e nomes acima de 128 caracteres. Travessia de
+  diretório (`../`) cai no filtro de barras, e o limite de tamanho troca um
+  `OSError` cru por mensagem em pt-BR
+  ([ADR-0010, revisão de 2026-08-23](adr/0010-portabilidade-tres-plataformas.md)).
 - **Exclusão trivial**: apagar o dado biométrico é apagar um arquivo — relevante
   para atender pedidos de exclusão sob a LGPD.
+- **Desinstalação que não decide pelo usuário.** Os desinstaladores de
+  `scripts/` preservam `vozes/` e `saida/` por padrão e exigem opção explícita
+  mais confirmação digitada para apagá-los, em vez de remover dado biométrico
+  como efeito colateral de desinstalar um programa. A mesma execução informa
+  onde os dados ficaram e o comando que os apaga de vez
+  ([ADR-0011](adr/0011-instalacao-por-script.md)).
 
 ### 7.3 Riscos aceitos
 
@@ -349,7 +371,6 @@ de ambiente virtual e 1,8 GB de pesos.
 |---|---|
 | **Sem cifragem em repouso** | Aceito para uso pessoal em máquina de trabalho. Obrigatório revisar em cenário multiusuário |
 | **Sem registro de consentimento** | O sistema não guarda quem autorizou a clonagem nem por quanto tempo. É controle de processo, não de sistema |
-| **Nomes de voz não sanitizados** | Um nome contendo `../` escreveria fora de `vozes/`. Não explorável por rede, pois a interface é local e monousuário |
 | **Uso indevido para personificação** | Risco inerente à tecnologia. Mitigado por documentação, não por controle técnico |
 
 ### 7.4 Uso responsável
@@ -405,6 +426,7 @@ degradar, em vez de quebrar, num ambiente montado com o wheel errado.
 | Mudança interna do XTTS no uso do `torchaudio` | Médio | Teste de fumaça: `checar`, cadastrar uma voz e sintetizar (skill `smoke-test`) |
 | Ausência de testes automatizados | Médio | A verificação é manual e documentada; nenhum CI a exerce |
 | Desempenho não medido em macOS e Windows | Baixo | Instalação verificada nas três plataformas; medição só no Linux |
+| Módulo Python novo ausente das listas dos instaladores e do `Dockerfile` | Médio | Registrado como armadilha no `AGENTS.md`; a instalação quebra no primeiro uso, e `checar` não pega por ser o próprio arquivo que falta |
 
 ---
 

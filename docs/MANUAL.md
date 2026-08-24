@@ -1,6 +1,7 @@
 # Manual do Clonador de Voz Local
 
-**Versão 1.1** — inclui execução em contêiner e suporte a Linux, macOS e Windows.
+**Versão 1.2** — inclui instalação e desinstalação por script, execução em
+contêiner e suporte a Linux, macOS e Windows.
 
 Manual de operação do sistema de clonagem de voz. Para as decisões de
 arquitetura, veja o [SDD](SDD.md), os [ADRs](adr/) e o [modelo C4](c4/).
@@ -41,7 +42,89 @@ Plataformas suportadas:
 
 ### Instalação
 
-Com [uv](https://docs.astral.sh/uv/) (recomendado):
+São três caminhos. O primeiro serve para usar o sistema; o segundo, para mexer
+nele; o terceiro dispensa montar ambiente Python nenhum.
+
+Em todos, o [uv](https://docs.astral.sh/uv/) é quem instala as dependências. Ele
+não é uma preferência: o `requirements.txt` carrega fixações que **não são
+opcionais** — o wheel CPU-only do PyTorch no Linux e as versões compatíveis — e
+o `uv.toml`, a estratégia de índice que elas pressupõem. Instalar à mão, ou com
+`pip`, tem chance alta de trazer 2,5 GB de CUDA inútil ou o wheel errado do
+`torchcodec` (ver [ADR-0010](adr/0010-portabilidade-tres-plataformas.md)).
+
+#### a) Pelo script de instalação — para usar
+
+Não clona o repositório: baixa os sete arquivos que a execução exige, monta o
+ambiente, cria os atalhos e verifica o resultado
+([ADR-0011](adr/0011-instalacao-por-script.md)).
+
+Prefira ler antes de executar:
+
+```bash
+# Linux e macOS
+curl -fsSLO https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.sh
+less install.sh          # leia
+sh install.sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.ps1 -OutFile install.ps1
+notepad install.ps1      # leia
+.\install.ps1
+```
+
+Se preferir o atalho, em uma linha:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.sh | sh
+```
+
+```powershell
+irm https://raw.githubusercontent.com/dougmotshell/voice-clone/main/scripts/install.ps1 | iex
+```
+
+Vale saber o que se aceita aí: essa forma executa código que você não leu, e
+`main` é um ref móvel. Para amarrar a instalação a um ponto exato da história,
+passe `--ref <sha>`.
+
+Onde as coisas ficam:
+
+| | Linux e macOS | Windows |
+|---|---|---|
+| Programa e ambiente | `~/.local/share/voice-clone` | `%LOCALAPPDATA%\voice-clone` |
+| Vozes e áudios | `…/voice-clone/vozes` e `…/saida` | idem |
+| Atalhos | `~/.local/bin/voice-clone`, `…-web` | `…\voice-clone\bin\voice-clone.cmd` |
+| Pesos do XTTS-v2 | `~/.local/share/tts` | `%LOCALAPPDATA%\tts` |
+
+Depois disso, os comandos funcionam de qualquer diretório:
+
+```bash
+voice-clone checar
+voice-clone cadastrar minhavoz ~/audios/minha-voz.wav
+voice-clone falar minhavoz "Olá, mundo."
+voice-clone-web
+```
+
+Se o diretório dos atalhos não estiver no `PATH`, o instalador avisa e mostra a
+linha a acrescentar — ele não edita o seu `rc` nem o seu `PATH` sem pedir. No
+Windows, `-AdicionarAoPath` autoriza essa edição.
+
+Opções úteis (no PowerShell, os mesmos nomes em `-CamelCase`):
+
+| Opção | Efeito |
+|---|---|
+| `--prefixo DIR` | instala em outro lugar |
+| `--bin DIR` | cria os atalhos em outro lugar |
+| `--ref REF` | branch, tag ou commit a baixar |
+| `--local DIR` | instala de uma árvore em disco, sem rede |
+| `--instalar-uv` | instala o `uv` se ele não estiver disponível |
+| `--sem-verificar` | não roda `checar` no fim |
+| `--ajuda` | a lista completa |
+
+Reinstalar por cima é seguro: `vozes/` e `saida/` nunca são tocados.
+
+#### b) A partir de um clone — para desenvolver
 
 ```bash
 # Linux e macOS
@@ -53,20 +136,24 @@ uv venv --python 3.12 .venv
 $env:VIRTUAL_ENV=".venv"; uv pip install -r requirements.txt
 ```
 
-O `requirements.txt` carrega as fixações que **não são opcionais** — o wheel
-CPU-only do PyTorch no Linux e as versões compatíveis — e o `uv.toml` a
-configuração de índice que elas pressupõem. Não instale as dependências à mão:
-a chance de trazer 2,5 GB de CUDA inútil, ou o wheel errado do `torchcodec`, é
-alta (ver [ADR-0010](adr/0010-portabilidade-tres-plataformas.md)).
-
-Confirme o resultado antes de qualquer outra coisa:
+Rodando de dentro do clone, o instalador também serve — ele usa a árvore local
+em vez da rede, e dá os atalhos de brinde:
 
 ```bash
-.venv/bin/python falar.py checar      # Windows: .venv\Scripts\python falar.py checar
+sh scripts/install.sh
+```
+
+#### c) Verifique, sempre
+
+```bash
+voice-clone checar
+# no clone: .venv/bin/python falar.py checar
+# Windows, no clone: .venv\Scripts\python falar.py checar
 ```
 
 Todas as linhas devem sair `ok`. Se alguma sair `FALHA`, a própria saída diz o
-que fazer; a seção 8 detalha cada caso.
+que fazer; a seção 8 detalha cada caso. Pelo script de instalação, essa
+verificação já acontece no fim.
 
 ### Sem instalar nada: Docker
 
@@ -101,7 +188,11 @@ A interface web é mais confortável para uso repetido, porque mantém o modelo
 carregado na memória entre as gerações — você paga os ~24 s de carga uma vez só.
 
 ```bash
-cd voice-clone
+voice-clone-web                  # instalado pelo script
+```
+
+```bash
+cd voice-clone                   # a partir de um clone
 .venv/bin/python web.py          # Windows: .venv\Scripts\python web.py
 ```
 
@@ -144,7 +235,12 @@ O nome (`douglas`) é como você vai se referir à voz depois. Cadastrar de novo
 com o mesmo nome substitui a referência anterior.
 
 No Windows, troque `.venv/bin/python` por `.venv\Scripts\python` em todos os
-exemplos abaixo.
+exemplos abaixo. Instalado pelo script, o comando é `voice-clone` no lugar de
+`.venv/bin/python falar.py`, e funciona de qualquer diretório:
+
+```bash
+voice-clone cadastrar douglas ~/audios/minha-voz.wav
+```
 
 ### Listar vozes
 
@@ -320,7 +416,12 @@ Um parágrafo leva perto de um minuto. Acompanhe pelo terminal.
 
 **"O nome não pode conter < > : " / \ | ? *"** ou **"é um nome reservado pelo
 Windows"** — o nome da voz vira nome de arquivo e precisa ser válido nas três
-plataformas. Escolha outro.
+plataformas. Escolha outro. Os nomes de dispositivo do Windows (`CON`, `NUL`,
+`COM1`…) são recusados também com extensão, porque `CON.wav` lá continua sendo o
+console e não um arquivo.
+
+**"O nome tem N caracteres; o limite é 128"** — rótulo de voz é curto. O limite
+evita que o estouro apareça só na gravação, como erro do sistema operacional.
 
 ### Erros de ambiente
 
@@ -381,11 +482,63 @@ o seu usuário tem outro UID (`id -u`), ajuste no `Dockerfile`.
 `~/Library/Application Support/tts` no macOS e `%LOCALAPPDATA%\tts` no Windows
 (1,8 GB); em contêiner, no volume `modelos`. O ambiente virtual ocupa ~1,7 GB.
 Os áudios gerados se acumulam em `saida/` e podem ser apagados à vontade. A
-variável `TTS_HOME` move o cache dos pesos para outro lugar.
+variável `TTS_HOME` move o cache dos pesos para outro lugar. Para recuperar os
+1,8 GB dos pesos de uma vez, veja a seção 9.
 
 ---
 
-## 9. Limites conhecidos
+## 9. Desinstalação
+
+O instalador deixa uma cópia do desinstalador dentro do prefixo, então remover
+não depende de rede nem de ter o repositório em disco.
+
+```bash
+# Linux e macOS
+~/.local/share/voice-clone/uninstall.sh
+```
+
+```powershell
+# Windows
+& "$env:LOCALAPPDATA\voice-clone\uninstall.ps1"
+```
+
+**O padrão remove o programa e preserva os seus dados.** Isso é deliberado:
+`vozes/` guarda referências de voz, que são dado biométrico, e os pesos são
+1,8 GB que ninguém quer baixar de novo por acidente
+([ADR-0011](adr/0011-instalacao-por-script.md)).
+
+Antes de qualquer coisa, veja a lista do que seria removido:
+
+```bash
+~/.local/share/voice-clone/uninstall.sh --simular
+```
+
+| Opção | Efeito |
+|---|---|
+| *(nenhuma)* | remove o ambiente, o código e os atalhos |
+| `--remover-dados` | remove também `vozes/` e `saida/` — pede confirmação |
+| `--remover-modelos` | remove o cache de pesos do XTTS-v2 (~1,8 GB) |
+| `--tudo` | as duas acima juntas |
+| `--simular` | lista o que seria removido, sem remover |
+| `--prefixo DIR` | se você instalou em outro lugar |
+| `--sim` | não pergunta nada; obrigatório sem terminal interativo |
+
+No PowerShell, os mesmos nomes em `-CamelCase`: `-RemoverDados`,
+`-RemoverModelos`, `-Tudo`, `-Simular`, `-Prefixo`, `-Sim`.
+
+Apagar as vozes é irreversível, e o desinstalador exige confirmação digitada
+para isso. Se não vai mais usar o sistema, apagar é o certo: referência de voz
+guardada sem necessidade é dado biométrico exposto sem motivo.
+
+**Instalou a partir de um clone, sem o script?** Aí não há o que desinstalar
+além do que você criou: apague `.venv/` e o diretório do clone, e apague o cache
+dos pesos à mão (`~/.local/share/tts` no Linux, `~/Library/Application Support/tts`
+no macOS, `%LOCALAPPDATA%\tts` no Windows). Em contêiner, `docker compose down -v`
+remove o volume `modelos`, e `docker rmi voice-clone:local` a imagem.
+
+---
+
+## 10. Limites conhecidos
 
 - **Dois idiomas apenas** nesta configuração (pt-BR e en-US), embora o XTTS-v2
   suporte 17. Foi uma restrição de escopo, não do modelo.
@@ -403,7 +556,7 @@ variável `TTS_HOME` move o cache dos pesos para outro lugar.
 
 ---
 
-## 10. Uso responsável e segurança da informação
+## 11. Uso responsável e segurança da informação
 
 **Consentimento é obrigatório.** Clonar a voz de uma pessoa exige autorização
 explícita dela. Não use o sistema para imitar terceiros sem permissão, nem para

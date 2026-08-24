@@ -83,5 +83,36 @@ arquivo ou pipe, o encoding padrão é o do locale e os acentos levantam
   Aceito pelos dois motivos acima; se um terceiro índice entrar no projeto, a
   decisão precisa ser reavaliada.
 
----
-*Classificação ISO/IEC 27001: Uso Interno. Documento técnico sem dados pessoais.*
+## Revisão — 2026-08-23
+
+A validação de nome descrita acima tinha **duas lacunas**, encontradas ao revisar
+o que o SDD §7.3 afirmava sobre ela. A decisão não muda — aplicar as regras do
+sistema mais restritivo em todas as plataformas —, mas a implementação estava
+incompleta em dois pontos:
+
+**1. Nome reservado com extensão passava.** A comparação era com o nome inteiro,
+então `CON`, `NUL` e `LPT1` eram recusados, e `CON.wav`, `nul.txt` e `LPT1.mp3`
+passavam. No Windows a reserva vale **com qualquer extensão**: `CON.wav` continua
+sendo o dispositivo de console, e gravar ali não produz arquivo nenhum — a voz
+seria "cadastrada" sem existir. A comparação passou a ser com o trecho antes do
+primeiro ponto. `consultora` e `jarvis.v2` seguem válidos: a comparação é de
+igualdade, não de prefixo.
+
+**2. Não havia limite de comprimento.** Um nome de 300 caracteres passava e
+estourava depois, na gravação, com erro cru do sistema:
+
+```
+OSError: [Errno 36] File name too long
+```
+
+Agora `NOME_MAX = 128` recusa antes, com mensagem em pt-BR dizendo o tamanho
+recebido e o limite. 128 fica longe do teto de 255 bytes por componente no Linux
+e no macOS, e deixa folga para os 260 do `MAX_PATH` no Windows sem long paths
+habilitados.
+
+A travessia de diretório, que o SDD §7.3 listava como **risco aceito**, nunca
+existiu de fato: `..`, `../etc/passwd`, `a/b` e `a\b` já eram recusados desde a
+decisão original, porque `/`, `\` e o ponto final estão todos no filtro. O que o
+SDD registrava era uma afirmação desatualizada, não um furo — e foi corrigido
+para descrever o controle em §7.2. Verificado com 25 casos, positivos e
+negativos, mais uma síntese real depois da mudança.

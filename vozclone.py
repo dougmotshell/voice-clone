@@ -111,19 +111,33 @@ _NOMES_RESERVADOS = {
     *(f"LPT{i}" for i in range(1, 10)),
 }
 
+# Um rótulo de voz é curto por natureza. O limite existe para que o estouro
+# apareça como mensagem em pt-BR em vez de `OSError: [Errno 36] File name too
+# long` na hora de gravar — 300 caracteres passavam a validação e quebravam ali.
+# 128 fica longe do teto de 255 bytes do componente no Linux e no macOS, e deixa
+# folga para os 260 do MAX_PATH no Windows sem long paths habilitados.
+NOME_MAX = 128
+
 
 def validar_nome(nome: str) -> str:
     """Devolve o nome limpo ou levanta ValueError explicando o que está errado."""
     nome = (nome or "").strip()
     if not nome:
         raise ValueError("Informe um nome para a voz.")
+    if len(nome) > NOME_MAX:
+        raise ValueError(
+            f"O nome tem {len(nome)} caracteres; o limite é {NOME_MAX}."
+        )
     if _NOME_INVALIDO.search(nome):
         raise ValueError(
             'O nome não pode conter < > : " / \\ | ? * nem caracteres de controle.'
         )
     if nome.rstrip(". ") != nome:
         raise ValueError("O nome não pode terminar em ponto nem em espaço.")
-    if nome.upper() in _NOMES_RESERVADOS:
+    # A reserva vale com qualquer extensão: no Windows, `CON.wav` continua sendo
+    # o dispositivo de console, e gravar ali não produz arquivo nenhum. Por isso
+    # a comparação é com o trecho antes do primeiro ponto, não com o nome todo.
+    if nome.split(".")[0].upper() in _NOMES_RESERVADOS:
         raise ValueError(f"'{nome}' é um nome reservado pelo Windows. Escolha outro.")
     return nome
 

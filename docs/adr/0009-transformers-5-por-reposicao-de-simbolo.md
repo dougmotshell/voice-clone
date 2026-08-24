@@ -96,6 +96,3 @@ série 5.x**: a máquina de import preguiçoso do `transformers` acredita na
 resposta e vai buscar a versão de um pacote que não está instalado, derrubando o
 import de `GPT2PreTrainedModel`. O registro fica aqui para poupar a tentativa —
 a saída certa é a do [ADR-0003](0003-io-audio-via-soundfile.md).
-
----
-*Classificação ISO/IEC 27001: Uso Interno. Documento técnico sem dados pessoais.*

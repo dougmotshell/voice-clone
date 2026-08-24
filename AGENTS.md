@@ -22,6 +22,9 @@ VIRTUAL_ENV=.venv uv pip install -r requirements.txt
 
 docker compose up --build               # web em contêiner
 docker compose run --rm cli checar      # CLI em contêiner
+
+sh scripts/install.sh                   # instala no prefixo do usuário
+sh scripts/uninstall.sh --simular       # o que a remoção levaria
 ```
 
 Não existe suíte de testes automatizados. A verificação de fato é
@@ -56,6 +59,16 @@ hyperthreading ligado a mesma frase levou 2,5x mais tempo. Não "otimize" para
 **Licença do modelo proíbe uso comercial.** O XTTS-v2 é CPML. Não sugira este
 projeto para produto pago; para isso o motor teria de mudar (Chatterbox, MIT).
 
+**Módulo novo entra em cinco listas.** Os arquivos que a execução exige
+(`compat.py`, `vozclone.py`, `falar.py`, `web.py`) estão nomeados nos quatro
+scripts de `scripts/` e no `Dockerfile`. Acrescentar um `.py` ao projeto sem
+atualizar todos produz uma instalação que quebra só no primeiro uso
+([ADR-0011](docs/adr/0011-instalacao-por-script.md)).
+
+**A desinstalação não apaga voz sem ser mandada.** `vozes/` é dado biométrico e
+os pesos são 1,8 GB: o padrão preserva os dois, e cada um sai por uma opção
+própria com confirmação. Não transforme isso em "limpa tudo por padrão".
+
 ## Dados sensíveis
 
 Áudio de voz é **dado biométrico**. `vozes/` e `saida/` são ignorados pelo git —
@@ -87,8 +100,12 @@ se a decisão mudou, um ADR novo que o substitui — não reescrever a história
 novo na CLI entra como aba ou controle na web, e vice-versa.
 
 **Nomes de voz e de saída passam por `vozclone.validar_nome()`**, que aplica as
-regras do Windows em todas as plataformas. Não escreva caminho a partir de
-entrada do usuário sem passar por ela.
+regras do Windows em todas as plataformas: caracteres proibidos, ponto ou espaço
+final, nome de dispositivo **com ou sem extensão** (`CON.wav` também é o console)
+e limite de 128 caracteres. Não escreva caminho a partir de entrada do usuário
+sem passar por ela, e não "simplifique" nenhuma dessas regras — cada uma cobre
+uma falha concreta, registrada na revisão do
+[ADR-0010](docs/adr/0010-portabilidade-tres-plataformas.md).
 
 ## Superfícies de IA
 
